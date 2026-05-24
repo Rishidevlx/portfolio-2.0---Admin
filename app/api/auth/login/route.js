@@ -15,25 +15,30 @@ export async function POST(request) {
 
     // 1. Initialize DB if empty (auto-migration from .env)
     await query(`
-      CREATE TABLE IF NOT EXISTS admin_users (
+      CREATE TABLE IF NOT EXISTS admins (
         id INT AUTO_INCREMENT PRIMARY KEY,
         email VARCHAR(255) UNIQUE NOT NULL,
         password VARCHAR(255) NOT NULL,
         two_factor_secret VARCHAR(255),
-        two_factor_enabled BOOLEAN DEFAULT FALSE
+        two_factor_enabled BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
     
-    const users = await query("SELECT * FROM admin_users LIMIT 1;");
+    // Auto-add 2FA columns if missing (migration)
+    try { await query("ALTER TABLE admins ADD COLUMN two_factor_secret VARCHAR(255);"); } catch(e){}
+    try { await query("ALTER TABLE admins ADD COLUMN two_factor_enabled BOOLEAN DEFAULT FALSE;"); } catch(e){}
+    
+    const users = await query("SELECT * FROM admins LIMIT 1;");
     if (users.length === 0) {
       const envEmail = process.env.ADMIN_EMAIL || "admin@rishi.com";
       const envPass = process.env.ADMIN_PASSWORD || "rishi4693";
       const hashedPass = await bcrypt.hash(envPass, 10);
-      await query("INSERT INTO admin_users (email, password) VALUES (?, ?);", [envEmail, hashedPass]);
+      await query("INSERT INTO admins (email, password) VALUES (?, ?);", [envEmail, hashedPass]);
     }
 
     // 2. Fetch User
-    const dbUsers = await query("SELECT * FROM admin_users WHERE email = ? LIMIT 1;", [email]);
+    const dbUsers = await query("SELECT * FROM admins WHERE email = ? LIMIT 1;", [email]);
     if (dbUsers.length === 0) {
       return NextResponse.json({ success: false, error: "Invalid email or password." }, { status: 401 });
     }
